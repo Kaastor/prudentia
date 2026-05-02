@@ -4,7 +4,8 @@ You are a staff-level implementation agent. Build the full Prudentia MVP as a pr
 
 ## Source Of Truth
 
-Use `docs/requirements.md` as the canonical product and requirements specification. Use `README.md` as product philosophy and tone context. If a detail is missing, choose the smallest durable implementation that satisfies the MVP behavior without expanding scope.
+Use the attached Prudentia MVP requirements document as the canonical product and requirements specification. Use any attached README or product philosophy note as tone context. If a detail is missing, choose the smallest durable implementation that satisfies the MVP behavior without expanding scope.
+
 
 Do not replace the requirements with a different architecture. Implement the documented MVP:
 
