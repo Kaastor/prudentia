@@ -8,13 +8,13 @@ Use `docs/requirements.md` as the canonical product and requirements specificati
 
 Do not replace the requirements with a different architecture. Implement the documented MVP:
 
-- Local TypeScript/Node backend.
-- React + Vite local web UI.
+- Local service/runtime.
+- Local browser-based web UI.
 - Thin CLI for direct validation of system functions.
 - Local workspace folder as source of truth.
 - Python 3.12 + pytest assignment generation and validation.
-- Codex integration behind a clear adapter boundary.
-- Docker-based test runner contract with a native execution escape hatch.
+- Codex integration behind a clear boundary.
+- Sandboxed test-runner boundary with a native execution escape hatch.
 - Student and teacher ZIP exports with safety scanning.
 - Minimal automated tests that prove the core behaviors work.
 
@@ -27,49 +27,35 @@ Build the smallest complete MVP that is durable:
 - Clear module ownership and narrow responsibilities.
 - Honest interfaces around durable boundaries: filesystem, Codex, test execution, HTTP, CLI, export packaging.
 - Explicit data contracts with runtime validation where inputs come from files, CLI args, HTTP, or generated artifacts.
-- Boring, readable TypeScript over clever abstractions.
+- Boring, readable typed code over clever abstractions.
 - Small cohesive functions with names that explain intent.
 - Minimal duplication is acceptable until there is a real repeated pattern.
 - No speculative plugin systems, factories, background queues, databases, auth systems, cloud sync, LMS integrations, or language adapters beyond Python/pytest.
 - No placeholder-only implementation for MVP-critical behavior.
 - No single-file monolith.
-- No broad public APIs beyond what the CLI, local server, and packages need now.
+- No broad public APIs beyond what the CLI, local server, and owned modules need now.
 
 Every changed or generated file must support the MVP, tests, packaging, docs, or required local developer workflow.
 
-## Required Repository Shape
+## Required Ownership Boundaries
 
-Create a complete monorepo with this shape unless there is a strong implementation reason to make a smaller equivalent boundary:
+Create a complete repository with clear ownership boundaries. Exact directory names, package names, framework choices, and TypeScript shapes are implementation-owned, but the repo must keep these responsibilities separated:
 
-```text
-prudentia/
-  apps/
-    cli/
-    web/
-    local-server/
-  packages/
-    core/
-    workspace/
-    codex-adapter/
-    validators/
-    runner-docker/
-    generators/
-    exporters/
-    reporting/
-    templates-python-pytest/
-  examples/
-    palindrome-python-pytest/
-  docs/
-  tests/
-  package.json
-  pnpm-workspace.yaml
-  tsconfig.base.json
-  README.md
-  SECURITY.md
-  LICENSE
-```
+| Component | Responsibilities |
+| --- | --- |
+| CLI | Starts UI/server, runs direct workflows, prints errors, supports automation. |
+| Local web UI | Guided assignment creation, context preview, progress, review, approval, export. |
+| Local server | Owns HTTP API, workflow orchestration, and progress events. |
+| Workspace boundary | Creates folders, writes assignment metadata, checkpoints, manifests, and logs. |
+| Codex boundary | Builds prompts, calls Codex SDK when available, tracks task IDs, records changed files. |
+| Context manifest boundary | Determines files shown to teacher and included in Codex tasks. |
+| Validation boundary | Checks required files, metadata, brief/test/rubric consistency, and forbidden files. |
+| Test-runner boundary | Runs pytest in isolated execution path with network disabled by default. |
+| Simulation boundary | Generates weak/partial/misconception submissions and runs tests. |
+| Reporting boundary | Writes validation report, simulation matrix, and teacher report. |
+| Export boundary | Creates student and teacher ZIPs with manifest and safety scan. |
 
-Prefer `pnpm`, Node.js 20+, TypeScript, Vitest, Fastify, Commander, React, Vite, Zod, and a maintained ZIP library. Keep dependency choices conservative and justified by current needs.
+Choose mature, boring libraries that fit the selected local runtime. The implementation must provide documented install, build, test, lint, and CLI demo commands. Keep dependency choices conservative and justified by current needs.
 
 ## Required Core Behaviors
 
@@ -93,11 +79,30 @@ Validate paths so all writes remain inside the workspace root. Reject path trave
 
 ### Codex Adapter
 
-Create a `CodexAdapter` interface matching the requirements. Keep real Codex SDK usage isolated in `packages/codex-adapter`.
+Create an explicit Codex integration boundary. The exact TypeScript interface is implementation-owned, but all real Codex SDK usage must stay inside one narrow owned module.
 
-The MVP must be testable without live Codex credentials. Provide a deterministic local implementation for tests and offline demo generation, and a real adapter boundary that can be wired to `@openai/codex-sdk` when available. Do not inspect, copy, parse, export, or request `~/.codex/auth.json` or ChatGPT credentials.
+The boundary must support:
 
-If the exact SDK API cannot be verified in the implementation environment, keep the adapter API stable, make readiness fail gracefully with actionable setup guidance, and keep all non-Codex system behavior fully functional and tested.
+- readiness checks without reading credentials
+- running one bounded task in one workspace
+- task kinds for planning, brief generation, starter generation, solution generation, test generation, repair, rubric generation, simulation generation, and quality review
+- prompt input
+- context manifest path
+- allowed write globs
+- expected artifacts
+- read-only vs workspace-write mode
+- result status
+- task/thread IDs when available
+- timestamps
+- changed files
+- unresolved issues
+- human-readable summary
+
+The MVP must be testable without live Codex credentials. Provide a deterministic local implementation for tests and offline demo generation, and a real adapter boundary that can be wired to the official Codex SDK when available. Do not inspect, copy, parse, export, or request `~/.codex/auth.json` or ChatGPT credentials.
+
+If the SDK API cannot be verified in the implementation environment, keep the boundary stable, make readiness fail gracefully with actionable setup guidance, and keep all non-Codex system behavior fully functional and tested.
+
+When a workspace is created, write conservative project-scoped Codex settings if supported by the SDK/CLI. These settings must prefer workspace-write behavior, approval before risky actions, no network access by default, and writable roots limited to the assignment workspace.
 
 ### Generation Pipeline
 
@@ -124,14 +129,65 @@ For the deterministic MVP path, generate a coherent Python/pytest assignment suc
 
 Starter code must not include the complete reference solution. Solution code must pass visible and hidden tests.
 
+Use stable prompt templates for AI-assisted tasks. Each prompt begins with this control block or a close equivalent:
+
+```text
+You are the Codex worker for Prudentia, a local-first CS assignment studio.
+Operate only inside the current assignment workspace.
+Use the context manifest as the source of truth for allowed files.
+Do not read or write outside the assignment workspace.
+Do not include teacher-only solution or hidden tests in student-facing files.
+Prefer simple, teachable code over clever code.
+After completing the task, update .prudentia/codex_status.json with:
+  - task_kind
+  - changed_files
+  - assumptions
+  - unresolved_issues
+  - next_recommended_action
+```
+
+Create an explicit context manifest boundary. The exact TypeScript shape is implementation-owned, but the manifest must be a durable structured record that includes:
+
+- schema version
+- manifest ID
+- workspace ID
+- task kind
+- creation timestamp
+- included files with path, reason, and role
+- roles for student-visible, teacher-only, metadata, test, and report files
+- excluded globs
+- allowed write globs
+- privacy warnings
+
 ### Validation
 
 Implement deterministic validation of required files and artifact structure. Run pytest through the Docker runner by default, with a native execution escape hatch only when explicitly requested by CLI flag or advanced UI setting.
+
+Create an explicit test-runner boundary. The exact Docker command is implementation-owned, but the boundary must preserve these safety invariants:
+
+- run generated code against an ephemeral workspace copy
+- disable network access by default
+- avoid source workspace writes
+- write results only to the explicit run result directory
+- capture stdout, stderr, exit code, pytest report, and run metadata
+- support native pytest execution only through an explicit escape hatch
 
 Record validation output in:
 
 - `reports/validation_report.json`
 - `.prudentia/runs/<run-id>/`
+
+Use this run output boundary:
+
+```text
+.prudentia/runs/<run-id>/
+  workspace-copy/
+  stdout.txt
+  stderr.txt
+  exit_code.txt
+  pytest_report.json
+  run_metadata.json
+```
 
 The test runner must operate on an ephemeral run copy, not directly on the source workspace.
 
@@ -171,19 +227,28 @@ Generate:
 
 Reports should summarize validation status, generated artifacts, simulation outcomes, unresolved issues, and export status.
 
-### Local HTTP Server
+### Local Server Boundary
 
-Implement the local Fastify server endpoints from `docs/requirements.md`:
+Implement a local server boundary for the web UI and CLI orchestration. Exact framework and route names are implementation-owned, but the server must expose operations for:
 
-- `GET /api/health`
-- `POST /api/workspaces`
-- `GET /api/workspaces/:id`
-- `POST /api/workspaces/:id/generate`
-- `POST /api/workspaces/:id/validate`
-- `POST /api/workspaces/:id/simulate`
-- `POST /api/workspaces/:id/report`
-- `POST /api/workspaces/:id/export`
-- `GET /api/workflows/:runId/events`
+- readiness/health
+- workspace creation
+- workspace metadata and artifact status lookup
+- generation
+- validation
+- simulation
+- report refresh
+- student and teacher export
+- workflow progress streaming or polling
+
+Create an explicit workflow progress boundary. The exact event type is implementation-owned, but progress events must include:
+
+- run ID
+- workspace ID
+- event kind for run start, Codex task start/finish, validation start/finish, export start/finish, and error
+- human-readable message
+- creation timestamp
+- optional structured payload
 
 Use simple local state. Do not introduce a database.
 
@@ -226,7 +291,7 @@ prudentia status
 prudentia clean-runs
 ```
 
-The CLI should be thin orchestration over package APIs, not duplicate business logic.
+The CLI should be thin orchestration over owned domain APIs, not duplicate business logic.
 
 ## Minimum Test Suite
 
@@ -244,21 +309,21 @@ Add a focused automated test suite. It does not need exhaustive UI coverage, but
 - teacher export blocks credential-like content
 - CLI smoke path can create, generate, validate, report, and export in a temporary workspace
 
-Provide these commands and make them pass:
+Provide the implementation's install, build, test, and lint commands, and make them pass. Also provide a CLI smoke path equivalent to:
 
 ```bash
-pnpm install
-pnpm build
-pnpm test
-pnpm lint
-pnpm prudentia doctor
-pnpm prudentia create --title "Palindrome checker" --course CS101 --topic "strings and functions" --difficulty beginner
-pnpm prudentia generate --all
-pnpm prudentia validate --allow-native-execution
-pnpm prudentia simulate --profiles weak,partial,misconception
-pnpm prudentia report
-pnpm prudentia export student
-pnpm prudentia export teacher
+<install command>
+<build command>
+<test command>
+<lint command>
+<prudentia command> doctor
+<prudentia command> create --title "Palindrome checker" --course CS101 --topic "strings and functions" --difficulty beginner
+<prudentia command> generate --all
+<prudentia command> validate --allow-native-execution
+<prudentia command> simulate --profiles weak,partial,misconception
+<prudentia command> report
+<prudentia command> export student
+<prudentia command> export teacher
 ```
 
 If Docker is unavailable during tests, tests may use the native execution escape hatch, but production defaults must still prefer Docker.
@@ -277,19 +342,32 @@ Do not ask users for OpenAI API keys or ChatGPT credentials in the UI. Codex set
 
 Work in this order and keep each step shippable:
 
-1. Monorepo scaffolding, package scripts, TypeScript config.
+1. Repository scaffolding, ownership boundaries, and build scripts.
 2. Core types and schemas.
 3. Workspace creation and filesystem safety.
-4. Deterministic generator and prompt/context manifest contracts.
+4. Deterministic generator and prompt/context manifest boundaries.
 5. Artifact validators.
-6. Runner abstraction with Docker default and native escape hatch.
+6. Test-runner boundary with Docker default and native escape hatch.
 7. Reporting.
 8. Export scanner and packager.
-9. CLI commands over package APIs.
-10. Local server endpoints.
-11. React workbench.
+9. CLI commands over domain APIs.
+10. Local server operations.
+11. Web workbench.
 12. Minimal tests and example assignment.
 13. Documentation and final ZIP packaging.
+
+Use these milestone exit criteria while working:
+
+| Milestone | Deliverable | Exit criteria |
+| --- | --- | --- |
+| M1: Repo and schemas | Repository boundaries, core domain models, `prudentia.yaml` parser, workspace creation. | `prudentia create` produces valid folder and metadata. |
+| M2: Codex boundary | Local Codex SDK integration boundary, readiness check, one task execution or graceful offline fallback. | Codex path can write `brief.md` when configured; deterministic fallback works in tests. |
+| M3: Generation pipeline | Generate brief, starter, solution, tests, rubric. | Generate All creates required artifacts. |
+| M4: Docker runner | Python/pytest sandbox runner and validation reports. | Reference solution can be tested in container when Docker is available. |
+| M5: Simulation and repair | Simulated submissions and bounded repair loop. | Simulation matrix is generated. |
+| M6: Export scanner | Student and teacher ZIP packages with manifests. | Forbidden-file and credential-leak tests pass. |
+| M7: Local web UI | Guided UI for all MVP workflows. | Demo can be completed without CLI except app launch. |
+| M8: Open-source polish | README, docs, tests, examples, SECURITY.md. | External developer can run demo from docs. |
 
 ## Completion Criteria
 

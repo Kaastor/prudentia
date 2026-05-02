@@ -1,19 +1,19 @@
 # Prudentia — Product Idea and MVP Requirements Specification
 
-Version 0.1 — Implementation-ready draft
+Version 0.1 — MVP product requirements
 
 Date: 2 May 2026
 
 | Field | Value |
 | --- | --- |
 | Product type | Open-source, local-first CS assignment workbench for teachers. |
-| AI integration | Uses the OpenAI Codex SDK from a local Node.js backend to control local Codex agents. |
+| AI integration | Uses locally authenticated Codex capabilities to generate and revise assignment artifacts. |
 | Primary user | Computer science teacher creating programming assignments. |
-| MVP platform | Local web UI served by a TypeScript/Node backend, plus CLI commands. |
+| MVP platform | Local web UI plus CLI commands on the teacher's machine. |
 | MVP language support | Python 3.12 assignments using pytest. |
 | Core value | Transforms Codex from a general coding agent into a structured assignment build system with validation, simulation, safety checks, and export packaging. |
 
-This document intentionally chooses a concrete MVP architecture. Post-MVP options are listed separately so engineering can start without open architectural questions.
+This document defines what the MVP must do and what must be true for users. Implementation structure, package boundaries, stack choices, and build sequencing belong in `prompts/implementation.md`.
 
 ## 1. Executive summary
 
@@ -37,7 +37,7 @@ The MVP is successful when a teacher can run one local command or use one local 
 
 - Local web UI launched from a CLI command.
 - CLI commands for create, generate, validate, simulate, report, and export.
-- Codex SDK integration through a local Node.js backend.
+- Codex integration through the local Prudentia runtime.
 - Teacher-managed Codex authentication; Prudentia does not collect OpenAI credentials.
 - Python 3.12 + pytest assignment generation and validation.
 - Assignment workspace schema with deterministic folders and metadata.
@@ -67,153 +67,61 @@ The MVP is successful when a teacher can run one local command or use one local 
 - Context transparency: before a Codex task, Prudentia shows the file manifest and teacher-controlled context included in that task.
 - Export safety: student exports must never contain solution, hidden tests, private notes, run logs, or AI history unless explicitly overridden through a dangerous advanced flow. The MVP should not implement that override.
 
-## 3. Canonical MVP architecture
+## 3. MVP system model
 
-The MVP uses a local TypeScript/Node backend. The backend serves the local web UI, exposes local HTTP endpoints, owns workspace state, invokes the Codex SDK, runs sandboxed tests, and creates exports. The frontend is a browser UI opened against localhost. The CLI starts the server and also exposes direct command-line operations.
+The MVP runs locally on the teacher's machine. It provides a browser-based workbench and CLI commands. It stores each assignment as a portable local workspace folder, uses the teacher's existing local Codex authentication, runs generated Python code in a sandboxed test path by default, and creates separate student and teacher export packages.
 
 ```text
 Teacher machine
   ├─ Browser at http://127.0.0.1:<port>
-  │    └─ Prudentia React UI
+  │    └─ Prudentia local web UI
   ├─ prudentia CLI
-  ├─ Local Node.js backend
-  │    ├─ Workspace Manager
-  │    ├─ Codex Orchestrator using @openai/codex-sdk
-  │    ├─ Context Manifest Builder
-  │    ├─ Artifact Validator
-  │    ├─ Docker Test Runner
-  │    ├─ Simulation Runner
-  │    ├─ Report Generator
-  │    └─ Export Packager
+  ├─ Local Prudentia service
+  │    ├─ Workspace state and artifact generation
+  │    ├─ Codex task orchestration
+  │    ├─ Validation and test execution
+  │    ├─ Simulation and reporting
+  │    └─ Export packaging and safety scanning
   ├─ Assignment workspace folder
   ├─ Local Codex installation and auth
   └─ Docker engine for sandboxed pytest execution
 ```
 
-### 3.1 Technology decisions
+### 3.1 System requirements
 
-| Area | MVP decision | Reason |
-| --- | --- | --- |
-| Runtime | Node.js 20+ with TypeScript | The official Codex TypeScript SDK requires server-side Node.js 18 or later; Node 20+ is a conservative implementation baseline. |
-| Codex integration | @openai/codex-sdk | Programmatically controls local Codex agents from Prudentia workflows. |
-| UI | React + Vite local web UI | Fast local UI with no cloud dependency. |
-| Backend | Fastify local HTTP server | Small, typed, and suitable for local APIs and SSE progress events. |
-| CLI | Commander-based TypeScript CLI | Simple command surface for power users and automation. |
-| State | Local YAML/JSON/JSONL files in workspace | No database needed for MVP; state travels with assignment. |
-| Validation | Zod schemas plus deterministic file checks | Codex output is never trusted without validation. |
-| Sandbox | Docker runner with --network=none | Reduces risk when running generated code and simulations. |
-| Export | ZIP packages; Markdown reports | MVP avoids PDF complexity and focuses on reliable packaging. |
+- All MVP workflows run without a Prudentia-hosted backend.
+- The local web UI and CLI operate on the same workspace state.
+- Workspace state is stored in local files that travel with the assignment.
+- Codex activity is bounded to the active assignment workspace and visible through context previews.
+- Validation never trusts generated artifacts without deterministic checks and test execution.
+- Export packaging is a distinct safety step, not a copy of the workspace folder.
 
-### 3.2 Repository layout
+## 4. Codex integration requirements
 
-```text
-prudentia/
-  apps/
-    cli/                  # prudentia command
-    web/                  # React local web UI
-    local-server/          # Fastify backend
-  packages/
-    core/                  # domain models and workflow state machine
-    codex-adapter/          # @openai/codex-sdk integration
-    workspace/              # file schema, manifests, checkpoints
-    validators/             # artifact and export validators
-    runner-docker/           # sandboxed pytest runner
-    generators/             # prompt contracts and orchestration plans
-    exporters/              # student/teacher ZIP packagers
-    reporting/              # teacher report and run summaries
-    templates-python-pytest/ # MVP template
-  examples/
-    palindrome-python-pytest/
-  docs/
-    architecture.md
-    data-privacy.md
-    sandboxing.md
-    codex-sdk-integration.md
-  tests/
-  package.json
-  pnpm-workspace.yaml
-  README.md
-  SECURITY.md
-  LICENSE
-```
+Prudentia uses locally authenticated Codex capabilities for bounded workflow steps. Codex can generate or revise assignment artifacts, but Prudentia owns the workspace structure, context preview, validation, simulation, approval gates, reporting, and export safety.
 
-## 4. Codex SDK integration contract
+### 4.1 Usage rules
 
-Prudentia uses the Codex SDK as the agent-control layer. The backend starts Codex threads for bounded workflow steps and instructs Codex to edit only the current assignment workspace. Prudentia validates the generated files after every step and never assumes that Codex output is correct.
+- Each AI-assisted workflow step has a recorded task kind, input context manifest, output summary, changed files, and unresolved issues.
+- Planning and review tasks should not write assignment artifacts unless the teacher explicitly starts a generation or repair step.
+- Generation and repair tasks may write only inside the active assignment workspace.
+- Prudentia does not modify the user's global Codex configuration.
+- Prudentia may create project-scoped Codex settings inside the assignment workspace when needed for conservative sandbox defaults.
+- Prudentia must never parse, copy, upload, or expose `~/.codex/auth.json`.
+- Prudentia must never ask for ChatGPT passwords, session cookies, OAuth tokens, or OpenAI API keys in its own UI.
+- If Codex is unavailable, the UI must allow non-AI editing and show a clear remediation path: install Codex, authenticate Codex locally, then rerun doctor.
 
-### 4.1 External source assumptions
+### 4.2 Context preview
 
-- OpenAI documents the Codex SDK as a way to programmatically control local Codex agents and integrate Codex into applications, workflows, and internal tools.
-- The TypeScript SDK is installed as @openai/codex-sdk and is intended for server-side Node.js 18 or later.
-- Codex supports ChatGPT sign-in for subscription access and API-key sign-in for usage-based access; Prudentia delegates authentication to the user-managed local Codex setup.
-- Codex local execution uses sandbox and approval controls; Prudentia should create conservative project-scoped defaults and still perform its own export/test safeguards.
+Before starting a Codex task, Prudentia shows:
 
-### 4.2 CodexAdapter interface
-
-```ts
-export interface CodexAdapter {
-  checkReadiness(workspaceRoot: string): Promise<CodexReadiness>;
-  runTask(input: CodexTaskInput): Promise<CodexTaskResult>;
-}
-
-export type CodexTaskKind =
-  | 'PLAN_ASSIGNMENT'
-  | 'GENERATE_BRIEF'
-  | 'GENERATE_STARTER'
-  | 'GENERATE_SOLUTION'
-  | 'GENERATE_TESTS'
-  | 'REPAIR_REFERENCE_SOLUTION'
-  | 'GENERATE_RUBRIC'
-  | 'GENERATE_SIMULATIONS'
-  | 'REVIEW_ASSIGNMENT_QUALITY';
-
-export interface CodexTaskInput {
-  workspaceRoot: string;
-  taskKind: CodexTaskKind;
-  prompt: string;
-  contextManifestPath: string;
-  allowedWriteGlobs: string[];
-  expectedArtifacts: string[];
-  mode: 'read-only' | 'workspace-write';
-}
-
-export interface CodexTaskResult {
-  taskId: string;
-  threadId: string;
-  startedAt: string;
-  finishedAt: string;
-  status: 'succeeded' | 'failed' | 'requires_teacher_review';
-  summary: string;
-  changedFiles: string[];
-  unresolvedIssues: string[];
-}
-```
-
-### 4.3 SDK usage rules
-
-- Each workflow step gets a new Codex task record and a context manifest.
-- Planning and review tasks use read-only mode whenever possible.
-- Generation and repair tasks use workspace-write mode limited to the assignment workspace.
-- Prudentia does not modify the user global Codex configuration.
-- Prudentia may write project-scoped .codex/config.toml inside the assignment workspace with conservative sandbox defaults.
-- Prudentia must never parse, copy, upload, or expose ~/.codex/auth.json.
-- If Codex is unavailable, the UI must allow non-AI editing and show a clear remediation path: install Codex, authenticate Codex, then rerun doctor.
-
-### 4.4 Project-scoped Codex configuration
-
-When a workspace is created, Prudentia writes a conservative project-scoped Codex configuration. If Codex requires the user to trust project-scoped config, Prudentia should display that as setup guidance rather than bypassing it.
-
-```toml
-# <workspace>/.codex/config.toml
-sandbox_mode = "workspace-write"
-approval_policy = "on-request"
-
-[sandbox_workspace_write]
-network_access = false
-writable_roots = ["."]
-exclude_slash_tmp = true
-exclude_tmpdir_env_var = true
-```
+- task kind
+- included files
+- why each file is included
+- file role: student-visible, teacher-only, metadata, test, or report
+- excluded globs
+- allowed write globs
+- privacy warnings
 
 ## 5. Assignment workspace schema
 
@@ -333,7 +241,7 @@ status:
 
 1. Teacher runs prudentia ui or prudentia create from a terminal.
 1. Teacher enters title, course, topic, difficulty, learning objectives, estimated duration, and constraints.
-1. Prudentia creates workspace folders, prudentia.yaml, .codex/config.toml, and initial context manifest.
+1. Prudentia creates the workspace folders, assignment metadata, conservative local execution settings, and initial context manifest.
 1. Prudentia checks Codex readiness. If not ready, teacher sees setup instructions and can continue with manual editing only.
 1. Teacher previews context and starts Generate All.
 1. Prudentia runs Codex tasks in sequence: plan, brief, starter, solution, tests, rubric.
@@ -348,7 +256,7 @@ status:
 1. Teacher opens an existing workspace.
 1. Prudentia reads prudentia.yaml and checks required folders.
 1. Teacher runs Validate.
-1. Docker runner executes pytest against solution and simulations.
+1. Prudentia executes pytest against solution and simulations through the configured sandbox path.
 1. Prudentia updates reports/validation_report.json and shows actionable errors.
 
 ### 6.3 Secondary workflow: export packages
@@ -360,9 +268,9 @@ status:
 1. Teacher package is written to exports/teacher/&lt;slug&gt;-teacher.zip.
 1. Export manifest is written to .prudentia/export_manifests/&lt;timestamp&gt;.json.
 
-## 7. CLI and local API surface
+## 7. CLI and local automation surface
 
-### 7.1 CLI commands
+The MVP must expose a thin command-line path for core workflows so a teacher or coding agent can validate the system without using the UI.
 
 ```bash
 prudentia doctor
@@ -379,100 +287,45 @@ prudentia status
 prudentia clean-runs
 ```
 
-### 7.2 Local HTTP endpoints
+The local web UI must support the same workflow operations. Long-running workflows must expose readable progress and terminal success or failure states.
 
-| Endpoint | Purpose |
-| --- | --- |
-| GET /api/health | Backend, Codex, Docker, and workspace readiness. |
-| POST /api/workspaces | Create a workspace. |
-| GET /api/workspaces/:id | Read workspace metadata and artifact statuses. |
-| POST /api/workspaces/:id/generate | Run one generation task or Generate All. |
-| POST /api/workspaces/:id/validate | Run deterministic artifact checks and pytest. |
-| POST /api/workspaces/:id/simulate | Generate and validate simulated submissions. |
-| POST /api/workspaces/:id/report | Create or refresh teacher report. |
-| POST /api/workspaces/:id/export | Create student or teacher package. |
-| GET /api/workflows/:runId/events | Server-sent events for progress streaming. |
+## 8. Required capabilities
 
-### 7.3 Workflow event model
+The MVP must provide these capabilities as clearly separable user-visible behaviors:
 
-```ts
-export interface WorkflowEvent {
-  runId: string;
-  workspaceId: string;
-  type:
-    | 'RUN_STARTED'
-    | 'CODEX_TASK_STARTED'
-    | 'CODEX_TASK_FINISHED'
-    | 'VALIDATION_STARTED'
-    | 'VALIDATION_FINISHED'
-    | 'EXPORT_STARTED'
-    | 'EXPORT_FINISHED'
-    | 'ERROR';
-  message: string;
-  createdAt: string;
-  payload?: Record<string, unknown>;
-}
-```
-
-## 8. Component responsibilities
-
-| Component | Responsibilities |
-| --- | --- |
-| CLI | Starts UI/server, runs direct workflows, prints errors, supports automation. |
-| Local web UI | Guided assignment creation, context preview, progress, review, approval, export. |
-| Local server | Owns HTTP API, workflow orchestration, and progress events. |
-| Workspace Manager | Creates folders, writes prudentia.yaml, checkpoints, manifests, and logs. |
-| Codex Orchestrator | Builds prompts, calls Codex SDK, tracks thread/task IDs, records changed files. |
-| Context Manifest Builder | Determines files shown to teacher and included in Codex tasks. |
-| Artifact Validator | Checks required files, schema, brief/test/rubric consistency, forbidden files. |
-| Docker Test Runner | Runs pytest in isolated container with network disabled. |
-| Simulation Runner | Generates weak/partial/misconception submissions and runs tests. |
-| Report Generator | Writes validation report, simulation matrix, and teacher_report.md. |
-| Export Packager | Creates student and teacher ZIPs with manifest and safety scan. |
+- create and reopen assignment workspaces
+- preview AI task context before generation or repair
+- generate assignment artifacts
+- validate artifacts and run tests
+- generate and evaluate simulated submissions
+- produce teacher-facing reports
+- package student and teacher exports
+- record local workflow history and errors
+- block unsafe exports
 
 ## 9. Generation and validation pipeline
 
-### 9.1 Generate All step sequence
+### 9.1 Generate All requirements
 
-```text
-GENERATE_ALL(workspace):
-  1. createCheckpoint("before-generate-all")
-  2. buildContextManifest(task="PLAN_ASSIGNMENT")
-  3. runCodex(PLAN_ASSIGNMENT, mode="read-only")
-  4. runCodex(GENERATE_BRIEF, mode="workspace-write")
-  5. validateFileExists("brief.md")
-  6. runCodex(GENERATE_STARTER, mode="workspace-write")
-  7. validateStarterStructure()
-  8. runCodex(GENERATE_SOLUTION, mode="workspace-write")
-  9. validateSolutionStructure()
- 10. runCodex(GENERATE_TESTS, mode="workspace-write")
- 11. validateTestStructure()
- 12. runCodex(GENERATE_RUBRIC, mode="workspace-write")
- 13. validateRubricStructure()
- 14. runReferenceValidation()
- 15. if validation fails: attemptRepair(maxAttempts=2)
- 16. updateStatus()
- 17. writeActionLog()
-```
+Generate All must create or refresh the complete assignment package in a bounded, reviewable workflow:
+
+- checkpoint the workspace before modifying generated artifacts
+- preview context before AI-assisted steps
+- generate the brief, starter code, reference solution, visible tests, hidden tests, and rubric
+- validate required files after generation
+- run the reference solution against visible and hidden tests
+- attempt bounded repair if reference validation fails
+- update artifact statuses and local workflow history
 
 ### 9.2 Repair loop
 
 The repair loop is bounded. Prudentia must not enter indefinite agent loops.
 
-```text
-attemptRepair(maxAttempts=2):
-  for attempt in 1..maxAttempts:
-    provide Codex with:
-      - validation_report.json
-      - failing pytest output
-      - brief.md
-      - solution/src/assignment.py
-      - tests/**
-    allow writes only to solution/** and tests/**
-    run validation again
-    if validation passes: return passed
-  return failed_with_teacher_review_required
-```
+- A failed reference validation may trigger at most two repair attempts.
+- Repair uses the validation report, failing test output, brief, reference solution, and tests as context.
+- Repair writes only to solution and test artifacts.
+- Each repair attempt is followed by validation.
+- If validation still fails, the assignment requires teacher review.
 
 ### 9.3 Artifact validation rules
 
@@ -488,34 +341,27 @@ attemptRepair(maxAttempts=2):
 
 MVP test execution uses Docker by default. Native local execution is disabled unless the teacher explicitly uses --allow-native-execution. This avoids silent execution of generated or simulated code on the host machine.
 
-### 10.1 Docker execution contract
+### 10.1 Docker execution invariants
 
-```bash
-docker run --rm \
-  --network=none \
-  --read-only \
-  --tmpfs /tmp:rw,noexec,nosuid,size=64m \
-  -v <run-dir>:/workspace:ro \
-  -v <result-dir>:/results:rw \
-  -w /workspace \
-  prudentia-python-pytest:0.1 \
-  pytest tests/visible tests/hidden \
-    --json-report --json-report-file=/results/result.json
-```
+The exact test command may vary. The invariant is fixed: no network, no host writes except the explicit run result directory, and no execution outside the ephemeral run copy.
 
-The exact command may change during implementation to allow writing pytest output to a mounted results directory. The invariant is fixed: no network, no host writes except the explicit run result directory, and no execution outside the ephemeral run copy.
+The Docker runner must:
 
-### 10.2 Run directory
+- run tests against an ephemeral workspace copy
+- disable network access
+- avoid writing to the source workspace
+- capture stdout, stderr, exit code, test report, and run metadata
+- expose actionable failure output to the teacher
 
-```text
-.prudentia/runs/<run-id>/
-  workspace-copy/
-  stdout.txt
-  stderr.txt
-  exit_code.txt
-  pytest_report.json
-  run_metadata.json
-```
+### 10.2 Run records
+
+Each validation run records enough information for review and reproduction:
+
+- ephemeral workspace copy location
+- stdout and stderr
+- exit code
+- pytest report
+- run metadata
 
 ### 10.3 Native execution escape hatch
 
@@ -585,10 +431,10 @@ Excluded:
 
 | ID | Requirement | Acceptance criterion |
 | --- | --- | --- |
-| FR-001 | Local startup | prudentia doctor verifies Node, Codex availability, Docker availability, and Python runner image status. |
-| FR-002 | Workspace creation | Create deterministic workspace folders, prudentia.yaml, .codex/config.toml, and initial .prudentia state. |
+| FR-001 | Local startup | prudentia doctor verifies local runtime, Codex availability, Docker availability, and Python test runner readiness. |
+| FR-002 | Workspace creation | Create deterministic workspace folders, assignment metadata, local execution settings, and initial workflow state. |
 | FR-003 | Course profile | Capture course name, level, audience, topic, difficulty, constraints, and learning objectives. |
-| FR-004 | Codex readiness | Check local Codex availability through a dry-run or adapter readiness call; never inspect credentials directly. |
+| FR-004 | Codex readiness | Check local Codex availability without inspecting credentials directly. |
 | FR-005 | Context preview | Show files and metadata that will be included in each Codex task before execution. |
 | FR-006 | Brief generation | Generate brief.md with objectives, task, constraints, examples, submission instructions, and grading notes. |
 | FR-007 | Starter generation | Generate starter/src/assignment.py with skeletons and TODOs, not full solution logic. |
@@ -616,8 +462,8 @@ Excluded:
 | NFR-004 | Sandboxing | Docker runner disables network and uses ephemeral run copies by default. |
 | NFR-005 | Reliability | Failed Codex tasks must not corrupt source workspace; checkpoint before destructive workflows. |
 | NFR-006 | Reproducibility | Each validation run records command, image, timestamps, exit code, and test report. |
-| NFR-007 | Maintainability | Core, Codex adapter, runner, validators, and exporters are separate packages. |
-| NFR-008 | Extensibility | Language/test framework support is adapter-based; MVP ships only Python/pytest adapter. |
+| NFR-007 | Maintainability | Core workflow, Codex integration, test execution, validation, and export responsibilities remain clearly separated. |
+| NFR-008 | Extensibility | Future language/test-framework support must not weaken the MVP Python/pytest contract. |
 | NFR-009 | Accessibility | Web UI supports keyboard navigation, semantic labels, plain status text, and readable error messages. |
 | NFR-010 | Performance | Workspace creation under 5 seconds; export under 10 seconds for MVP-size projects; AI time excluded. |
 | NFR-011 | Transparency | UI displays that Codex/OpenAI usage is controlled by the teacher-managed local Codex setup. |
@@ -625,44 +471,32 @@ Excluded:
 
 ## 14. Prompt and context contracts
 
-Prudentia should use stable prompt templates. Prompt text is versioned in packages/generators/prompts. Each prompt begins with a product-specific control block and includes the context manifest path.
+Prudentia should use stable prompt templates for AI-assisted workflows. Prompt text should be versioned in the implementation and include a product-specific control block plus the context manifest path.
 
 ### 14.1 Global task instruction
 
-```text
-You are the Codex worker for Prudentia, a local-first CS assignment studio.
-Operate only inside the current assignment workspace.
-Use the context manifest as the source of truth for allowed files.
-Do not read or write outside the assignment workspace.
-Do not include teacher-only solution or hidden tests in student-facing files.
-Prefer simple, teachable code over clever code.
-After completing the task, update .prudentia/codex_status.json with:
-  - task_kind
-  - changed_files
-  - assumptions
-  - unresolved_issues
-  - next_recommended_action
-```
+Every AI task instruction must require Codex to:
 
-### 14.2 Context manifest schema
+- operate only inside the current assignment workspace
+- use the context manifest as the source of truth for allowed files
+- avoid reading or writing outside the assignment workspace
+- keep teacher-only solution and hidden tests out of student-facing files
+- prefer simple, teachable code over clever code
+- report changed files, assumptions, unresolved issues, and recommended next action
 
-```ts
-export interface ContextManifest {
-  schemaVersion: '0.1';
-  manifestId: string;
-  workspaceId: string;
-  taskKind: CodexTaskKind;
-  createdAt: string;
-  includedFiles: Array<{
-    path: string;
-    reason: string;
-    role: 'student_visible' | 'teacher_only' | 'metadata' | 'test' | 'report';
-  }>;
-  excludedGlobs: string[];
-  allowedWriteGlobs: string[];
-  privacyWarnings: string[];
-}
-```
+### 14.2 Context manifest requirements
+
+The context manifest must include:
+
+- schema version
+- manifest ID
+- workspace ID
+- task kind
+- creation timestamp
+- included files with path, reason, and role
+- excluded globs
+- allowed write globs
+- privacy warnings
 
 ## 15. Local web UI requirements
 
@@ -679,7 +513,7 @@ The web UI is not a chat interface. It is a guided workbench. Chat-like freeform
 | Export | Student export; teacher export; export scanner result; package links. |
 | Settings | Workspace path, Docker/native execution setting, never-send globs, Codex readiness. |
 
-## 16. Security and privacy implementation requirements
+## 16. Security and privacy requirements
 
 ### 16.1 Credential handling
 
@@ -709,7 +543,7 @@ Engineering should use this end-to-end demo as the MVP acceptance test.
 # Preconditions
 codex is installed and authenticated locally
 Docker is installed and running
-Node.js 20+ is installed
+the supported local runtime is installed
 
 # Demo
 prudentia doctor
@@ -734,23 +568,22 @@ student ZIP does not contain solution/**, tests/hidden/**, reports/**, .prudenti
 ### 17.1 Done means
 
 - The demo works on at least one clean macOS or Linux developer machine.
-- All packages have automated tests for core schemas, export scanner, and workspace creation.
+- Automated tests cover core metadata, export scanner, and workspace creation.
 - At least one example assignment exists in examples/.
 - README has installation, Codex setup, Docker setup, and demo instructions.
 - SECURITY.md documents local execution risks and how to report issues.
 
-## 18. Implementation milestones
+## 18. MVP release readiness
 
-| Milestone | Deliverable | Exit criteria |
-| --- | --- | --- |
-| M1: Repo and schemas | Monorepo, core domain models, prudentia.yaml parser, workspace creation. | prudentia create produces valid folder and metadata. |
-| M2: Codex adapter | @openai/codex-sdk integration, readiness check, one task execution. | Codex can write a brief.md into workspace. |
-| M3: Generation pipeline | Generate brief, starter, solution, tests, rubric. | Generate All creates required artifacts. |
-| M4: Docker runner | Python/pytest sandbox runner and validation reports. | Reference solution can be tested in container. |
-| M5: Simulation and repair | Simulated submissions and bounded repair loop. | Simulation matrix is generated. |
-| M6: Export scanner | Student and teacher ZIP packages with manifests. | Forbidden-file tests pass. |
-| M7: Local web UI | Guided UI for all MVP workflows. | Demo can be completed without CLI except app launch. |
-| M8: Open-source polish | README, docs, tests, examples, SECURITY.md. | External developer can run demo from docs. |
+The MVP is release-ready when:
+
+- workspace creation, generation, validation, simulation, reporting, and export work from the CLI
+- the same workflows are available through the local web UI
+- student export safety checks pass
+- teacher export credential checks pass
+- core workspace, validation, and export behavior is covered by automated tests
+- a clean developer machine can run the documented demo after installing prerequisites
+- README and SECURITY documentation explain setup, local execution risks, Codex setup, Docker setup, and issue reporting
 
 ## 19. Post-MVP roadmap
 
@@ -777,15 +610,15 @@ The open-source core should include local workspace management, Codex orchestrat
 | Running generated code is risky. | Docker sandbox, no network, ephemeral run copies, native execution opt-in only. |
 | Student export may leak solution. | Allowlist export, forbidden path scanner, content leak scanner, export manifest. |
 | Install friction. | doctor command, clear setup docs, local web UI, example assignment. |
-| Codex SDK/API changes. | Keep Codex integration isolated in codex-adapter package with integration tests. |
+| Codex SDK/API changes. | Keep Codex integration isolated behind a single integration boundary with integration tests. |
 | Privacy concerns. | No cloud in MVP; context preview; no real student grading. |
 
 ## 22. Source basis
 
 The following external assumptions are based on official OpenAI developer documentation accessed on 2 May 2026:
 
-- Codex SDK documentation: programmatically control local Codex agents; TypeScript SDK uses @openai/codex-sdk and requires server-side Node.js 18 or later. https://developers.openai.com/codex/sdk
+- Codex SDK documentation: programmatically control local Codex agents. https://developers.openai.com/codex/sdk
 - Codex CLI documentation: local Codex can read, change, and run code on the user machine in the selected directory; CLI setup uses local authentication. https://developers.openai.com/codex/cli
 - Codex authentication documentation: Codex supports ChatGPT sign-in for subscription access and API-key sign-in for usage-based access; API-key use is billed through the OpenAI Platform. https://developers.openai.com/codex/auth
 - Codex agent approvals and security documentation: local Codex uses sandbox and approval controls; defaults include no network access and write permissions limited to the active workspace. https://developers.openai.com/codex/agent-approvals-security
-- Codex configuration reference: sandbox_mode and sandbox_workspace_write configuration keys. https://developers.openai.com/codex/config-reference
+- Codex configuration reference: project-scoped sandbox configuration. https://developers.openai.com/codex/config-reference
