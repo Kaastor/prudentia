@@ -85,9 +85,7 @@ This plan must be executed with `docs/requirements.md` as the product source of 
 - Current-workspace marker resolves the latest created workspace.
 - Docker image readiness appears in doctor output.
 - Run full verification:
-  - `python -m pytest -q`
-  - `python scripts/check_build.py`
-  - `python scripts/lint.py`
+  - `make gate`
 - Run or document the CLI smoke path in a clean temporary workspace:
   - `prudentia doctor`
   - `prudentia create --title "Palindrome checker" --course CS101 --topic "strings and functions" --difficulty beginner`

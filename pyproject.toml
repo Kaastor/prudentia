@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prudentia-mvp"
+version = "0.1.0"
+description = "Local-first CS assignment workbench MVP for Python/pytest assignments"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+authors = [{ name = "Prudentia MVP" }]
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+  "typer>=0.9",
+  "pydantic>=2.6",
+  "PyYAML>=6.0",
+  "pytest>=8.0",
+  "pytest-json-report>=1.5"
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2",
+  "pytest>=8.0",
+  "pytest-json-report>=1.5",
+  "ruff>=0.8",
+  "twine>=5.0"
+]
+
+[project.scripts]
+prudentia = "prudentia.cli:app"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"prudentia.web" = ["*.html", "*.css", "*.js"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+exclude = [
+  ".git",
+  ".venv",
+  "build",
+  "dist",
+]
+
+[tool.prudentia]
+assignment_python = "3.12"
+assignment_test_framework = "pytest"

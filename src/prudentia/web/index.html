@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prudentia MVP</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Prudentia MVP</h1>
+    <p>Local-first CS assignment workbench for Python/pytest assignments.</p>
+  </header>
+
+  <main>
+    <section aria-labelledby="workspace-heading" class="panel">
+      <h2 id="workspace-heading">Workspace</h2>
+      <div class="grid two">
+        <form id="create-form">
+          <h3>Create assignment</h3>
+          <label>Root directory <input id="create-root" name="root" value="." /></label>
+          <label>Title <input id="create-title" name="title" value="Palindrome checker" required /></label>
+          <label>Course <input id="create-course" name="course" value="CS101" required /></label>
+          <label>Topic <input id="create-topic" name="topic" value="strings and functions" required /></label>
+          <label>Difficulty <input id="create-difficulty" name="difficulty" value="beginner" required /></label>
+          <label>Estimated minutes <input id="create-minutes" name="estimated_minutes" type="number" min="5" value="45" /></label>
+          <label>Learning objectives <textarea id="create-objectives" rows="3">Write pure functions with clear input/output behavior
+Handle common string edge cases</textarea></label>
+          <label>Constraints <textarea id="create-constraints" rows="2">Use only the Python standard library.</textarea></label>
+          <button type="submit">Create workspace</button>
+        </form>
+        <form id="open-form">
+          <h3>Open existing workspace</h3>
+          <label>Workspace path <input id="workspace-path" name="path" placeholder="/path/to/palindrome-checker" /></label>
+          <button type="submit">Open workspace</button>
+          <button id="doctor-button" type="button">Run doctor</button>
+          <pre id="doctor-output" class="output" aria-live="polite"></pre>
+        </form>
+      </div>
+    </section>
+
+    <section aria-labelledby="status-heading" class="panel">
+      <h2 id="status-heading">Status</h2>
+      <div id="status-output" class="status-line">No workspace open.</div>
+      <div id="progress-output" class="progress" aria-live="polite"></div>
+    </section>
+
+    <section aria-labelledby="generate-heading" class="panel">
+      <h2 id="generate-heading">Generate</h2>
+      <p>Deterministic local generation is the default. Live Codex can be enabled only after local Codex setup outside Prudentia.</p>
+      <label class="inline"><input type="checkbox" id="use-codex" /> Use live Codex boundary</label>
+      <div class="button-row">
+        <button data-generate="all">Generate All</button>
+        <button data-generate="brief">Brief</button>
+        <button data-generate="starter">Starter</button>
+        <button data-generate="solution">Solution</button>
+        <button data-generate="tests">Tests</button>
+        <button data-generate="rubric">Rubric</button>
+      </div>
+      <h3>Context preview</h3>
+      <label>Task kind
+        <select id="context-task">
+          <option value="brief">brief</option>
+          <option value="starter">starter</option>
+          <option value="solution">solution</option>
+          <option value="tests">tests</option>
+          <option value="rubric">rubric</option>
+          <option value="simulations">simulations</option>
+          <option value="report">report</option>
+        </select>
+      </label>
+      <button id="context-button" type="button">Preview context</button>
+      <pre id="context-output" class="output"></pre>
+    </section>
+
+    <section aria-labelledby="review-heading" class="panel">
+      <h2 id="review-heading">Review artifacts</h2>
+      <div class="tabs" role="tablist" aria-label="Artifact tabs">
+        <button data-artifact="brief.md">brief.md</button>
+        <button data-artifact="starter/src/assignment.py">starter</button>
+        <button data-artifact="solution/src/assignment.py">solution</button>
+        <button data-artifact="tests/visible/test_basic.py">visible tests</button>
+        <button data-artifact="tests/hidden/test_edge_cases.py">instructor tests</button>
+        <button data-artifact="rubric.md">rubric</button>
+        <button data-artifact="reports/teacher_report.md">teacher report</button>
+        <button data-artifact="reports/simulation_matrix.md">simulation matrix</button>
+      </div>
+      <div class="button-row">
+        <button data-approve="brief">Approve brief</button>
+        <button data-approve="starter">Approve starter</button>
+        <button data-approve="solution">Approve solution</button>
+        <button data-approve="tests">Approve tests</button>
+        <button data-approve="rubric">Approve rubric</button>
+      </div>
+      <pre id="artifact-output" class="artifact"></pre>
+    </section>
+
+    <section aria-labelledby="validate-heading" class="panel">
+      <h2 id="validate-heading">Validate and simulate</h2>
+      <details>
+        <summary>Advanced execution setting</summary>
+        <label class="inline"><input type="checkbox" id="allow-native" /> Allow native pytest execution through ephemeral copies</label>
+        <p class="warning">Native execution runs generated code on this host. Use Docker by default when available.</p>
+      </details>
+      <div class="button-row">
+        <button id="validate-button" type="button">Validate</button>
+        <button id="simulate-button" type="button">Simulate</button>
+        <button id="report-button" type="button">Refresh report</button>
+      </div>
+      <pre id="validation-output" class="output"></pre>
+    </section>
+
+    <section aria-labelledby="export-heading" class="panel">
+      <h2 id="export-heading">Export</h2>
+      <div class="button-row">
+        <button data-export="student">Student ZIP</button>
+        <button data-export="teacher">Teacher ZIP</button>
+      </div>
+      <pre id="export-output" class="output"></pre>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

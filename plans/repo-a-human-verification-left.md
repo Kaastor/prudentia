@@ -1,14 +1,12 @@
 # Repo A Human Verification Left
 
-Implementation target: `/home/przemek/Downloads/prudentia-mvp`
+Implementation target: `/home/przemek/Nauka/prudentia`
 
 Plan source: `plans/repo-a-production-shaped-mvp.md`
 
 ## Current Automated Evidence
 
-- Build check passed: `python scripts/check_build.py`
-- Lint passed: `python scripts/lint.py`
-- Test suite passed: `python -m pytest -q` with 23 tests
+- Gate passed: `make gate`
 - Native CLI smoke passed through create, generate all, validate, simulate, report, approve, student export, teacher export, and status
 - Docker validation/simulation passed with run metadata showing Docker mode, network disabled, and read-only workspace copy
 - Independent agent verification found no remaining blocking findings after fixes
@@ -57,4 +55,3 @@ Plan source: `plans/repo-a-production-shaped-mvp.md`
 - Export scanner cannot prove absence of semantic solution hints; teacher review remains required.
 - Docker sandbox depends on the local Docker daemon and local image tag.
 - The MVP is local-first and has no auth, cloud sync, database, LMS integration, or multi-language support by design.
-

@@ -1,0 +1,9 @@
+[project]
+name = "palindrome-assignment"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.pytest.ini_options]
+pythonpath = ["starter/src"]
+testpaths = ["tests/visible"]
